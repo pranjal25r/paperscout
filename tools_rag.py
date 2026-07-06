@@ -87,19 +87,22 @@ def build_index(reason: str = "refresh index") -> dict:
 
 
 @tool
-def query_collection(question: str, top_k: int = 3) -> dict:
+def query_collection(question: str, top_k: int = 3, min_score: float = 0.25) -> dict:
     """
     Retrieve the most relevant stored papers for a natural-language question,
     using semantic similarity search over the FAISS index built by build_index.
+    Only returns matches above a minimum relevance score to avoid noise.
 
     Args:
         question: Natural-language question about the collected papers
-        top_k: Number of top matching papers to return (default 3)
+        top_k: Number of top matching papers to consider (default 3)
+        min_score: Minimum cosine similarity score to include a match (default 0.25)
 
     Returns:
         Dict with keys:
-            - matches: list of paper dicts (title, abstract, arxiv_id, pdf_url, score)
-            - note: present if the index doesn't exist yet
+            - matches: list of paper dicts (title, abstract, arxiv_id, pdf_url, score),
+                       filtered to only those above min_score
+            - note: present if the index doesn't exist yet, or if no matches clear the threshold
     """
     if not FAISS_PATH.exists() or not META_PATH.exists():
         return {"matches": [], "note": "No index found. Call build_index first."}
@@ -116,7 +119,7 @@ def query_collection(question: str, top_k: int = 3) -> dict:
 
     matches = []
     for score, idx in zip(scores[0], indices[0]):
-        if idx == -1:
+        if idx == -1 or score < min_score:
             continue
         p = papers[idx]
         matches.append({
@@ -127,8 +130,10 @@ def query_collection(question: str, top_k: int = 3) -> dict:
             "score": float(score),
         })
 
-    return {"matches": matches}
+    if not matches:
+        return {"matches": [], "note": "No sufficiently relevant papers found in the collection."}
 
+    return {"matches": matches}
 
 if __name__ == "__main__":
     # Quick standalone test
