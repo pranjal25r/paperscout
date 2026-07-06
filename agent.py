@@ -10,6 +10,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from tools_arxiv import fetch_arxiv_papers
 from tools_clean import clean_papers
 from tools_storage import store_papers, query_stored_papers
+from tools_rag import build_index, query_collection
+
 
 load_dotenv()
 
@@ -19,7 +21,7 @@ llm = ChatGroq(
     temperature=0,
 )
 
-tools = [fetch_arxiv_papers, clean_papers, store_papers, query_stored_papers]
+tools = [fetch_arxiv_papers, clean_papers, store_papers, query_stored_papers, build_index, query_collection]
 
 SYSTEM_PROMPT = """You are PaperScout, an autonomous research data-collection agent.
 
@@ -28,12 +30,18 @@ and store them in the local database. Always follow this order when collecting n
 1. fetch_arxiv_papers to get raw results
 2. clean_papers to dedupe/normalize them
 3. store_papers to persist the cleaned results
+4. build_index to refresh the searchable index with any newly stored papers
 
 Report back to the user with a short summary: how many papers were fetched, how many
 were duplicates, how many new ones were stored, and total papers in the database now.
 
-If the user asks to see/list/query existing papers instead of collecting new ones,
-use query_stored_papers directly.
+If the user asks to see/list existing papers, use query_stored_papers directly.
+
+If the user asks a QUESTION about the collected papers (e.g. "what papers do we have
+on X", "summarize what we know about Y"), use query_collection to retrieve the most
+relevant stored papers, then answer the question yourself using only the retrieved
+abstracts as evidence. If query_collection returns a note saying no index exists yet,
+call build_index first, then retry query_collection.
 """
 
 prompt = ChatPromptTemplate.from_messages([
@@ -47,7 +55,12 @@ agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 
 if __name__ == "__main__":
-    query = "Collect the 5 most recent papers on retrieval augmented generation"
-    result = agent_executor.invoke({"input": query})
-    print("\n=== FINAL ANSWER ===")
-    print(result["output"])
+    # First run: collect some papers
+    result1 = agent_executor.invoke({"input": "Collect the 5 most recent papers on large language model safety"})
+    print("\n=== COLLECT RESULT ===")
+    print(result1["output"])
+
+    # Second run: ask a question over the full collection
+    result2 = agent_executor.invoke({"input": "What papers do we have related to AI safety or monitoring?"})
+    print("\n=== QUERY RESULT ===")
+    print(result2["output"])
