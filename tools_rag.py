@@ -49,11 +49,15 @@ def _fetch_all_papers() -> list[dict]:
 
 
 @tool
-def build_index() -> dict:
+def build_index(reason: str = "refresh index") -> dict:
     """
     Build (or rebuild) a FAISS index over all papers currently stored in
     the database. Must be called at least once before query_collection
     can be used, and again any time new papers are added.
+
+    Args:
+        reason: Brief note on why the index is being built (not used in logic,
+                only present to satisfy the tool-calling schema)
 
     Returns:
         Dict with keys: indexed_count, index_path
@@ -128,7 +132,7 @@ def query_collection(question: str, top_k: int = 3) -> dict:
 
 if __name__ == "__main__":
     # Quick standalone test
-    build_result = build_index.invoke({})
+    build_result = build_index.invoke({"reason": "test run"})
     print("Build index result:", build_result)
 
     if build_result["indexed_count"] > 0:
