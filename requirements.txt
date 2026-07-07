@@ -1,0 +1,9 @@
+langchain
+langchain-groq
+langchain-community
+arxiv
+requests
+python-dotenv
+faiss-cpu
+sentence-transformers
+gradio
