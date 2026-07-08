@@ -92,6 +92,10 @@ During development, I benchmarked both models for tool-calling reliability on Gr
 **Tool-level testability:**
 Every tool (`fetch_arxiv_papers`, `clean_papers`, `store_papers`, `query_stored_papers`, `build_index`, `query_collection`) has a standalone `if __name__ == "__main__"` test block and was verified working in isolation before being wired into the agent — so agent-level bugs could be isolated to orchestration rather than underlying logic.
 
+## Observability
+
+Integrated [LangSmith](https://smith.langchain.com) tracing to inspect agent execution — every LLM call, tool invocation, latency, and token count is automatically captured per run. This surfaced that `query_collection`'s embedding step (via `sentence-transformers`) accounts for the majority of end-to-end latency, not the LLM call itself — useful for future optimization (e.g., persistent embedder caching).
+
 ## Known limitations
 
 - No conversation memory between turns — each request is handled independently
