@@ -136,12 +136,29 @@ def query_collection(question: str, top_k: int = 3, min_score: float = 0.25) -> 
     return {"matches": matches}
 
 if __name__ == "__main__":
-    # Quick standalone test
-    build_result = build_index.invoke({"reason": "test run"})
+    import time
+
+    # Genuine cold start: nothing loaded yet in this process
+    start = time.time()
+    build_result = build_index.invoke({})
+    cold_index_build = time.time() - start
+    print(f"Index build (includes embedder load): {cold_index_build:.2f}s")
     print("Build index result:", build_result)
 
     if build_result["indexed_count"] > 0:
-        query_result = query_collection.invoke({"question": "papers about video generation", "top_k": 2})
-        print("\nQuery result:")
-        for m in query_result["matches"]:
-            print(f"- [{m['score']:.3f}] {m['title']}")
+        latencies = []
+        queries = [
+            "AI safety or monitoring",
+            "diffusion models",
+            "video generation",
+            "long context reasoning",
+            "unlearning in language models",
+        ]
+        for q in queries:
+            start = time.time()
+            query_collection.invoke({"question": q, "top_k": 5, "min_score": 0.25})
+            latencies.append(time.time() - start)
+
+        avg_latency = sum(latencies) / len(latencies)
+        print(f"\nPer-query latencies: {[f'{l:.3f}s' for l in latencies]}")
+        print(f"Average query latency (embedder pre-warmed): {avg_latency:.3f}s")
