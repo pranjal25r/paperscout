@@ -28,7 +28,7 @@ The LLM (not hardcoded logic) decides which of these steps to run and in what se
 User request
      │
      ▼
-LangChain AgentExecutor (Groq / Llama 3.1 8B)
+LangChain AgentExecutor (Groq / gpt-oss-20b)
      │
      ├── fetch_arxiv_papers   → arXiv API
      ├── clean_papers          → dedup + normalize
@@ -42,8 +42,8 @@ Each tool is a standalone, independently testable Python function wrapped with L
 
 ## Tech stack
 
-- **Agent framework:** LangChain (`create_tool_calling_agent`, `AgentExecutor`)
-- **LLM:** Groq `llama-3.1-8b-instant`
+- **Agent framework:** LangChain 0.3 (`create_tool_calling_agent`, `AgentExecutor`; versions pinned in requirements.txt)
+- **LLM:** Groq `openai/gpt-oss-20b` (originally `llama-3.1-8b-instant`; migrated after Groq deprecated it in August 2026)
 - **Retrieval:** FAISS (`IndexFlatIP`, cosine similarity) + `sentence-transformers` (`all-MiniLM-L6-v2`)
 - **Storage:** SQLite
 - **Data source:** arXiv API
@@ -59,6 +59,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
+
+Dependencies are pinned; LangChain 1.x and Gradio 6 are not compatible with this code.
 
 Create a `.env` file:
 
@@ -80,8 +82,8 @@ python app.py
 
 ## Design notes and engineering decisions
 
-**Why `llama-3.1-8b-instant` instead of `llama-3.3-70b-versatile`:**
-During development, I benchmarked both models for tool-calling reliability on Groq. Despite 70B's stronger reasoning, it repeatedly failed on structured tool-calling in this workflow including empty-argument parsing errors, malformed parallel tool calls, and type-mismatched arguments (e.g., generating `"10"` instead of `10` for a numeric parameter). 8B was consistently reliable across the same tasks. Since tool-calling correctness matters more than answer eloquence for an agentic pipeline, I chose 8B for both development and the deployed demo a deliberate reliability-over-raw-capability tradeoff.
+**Model choice (Llama-3.1-8B over Llama-3.3-70B, now gpt-oss-20b):**
+In my development runs (roughly 30–40, not a formal benchmark), Llama-3.3-70B on Groq repeatedly produced malformed tool calls: empty-argument parsing errors, malformed parallel tool calls, and type-mismatched arguments (e.g. `"10"` instead of `10`). Llama-3.1-8B was reliable on the same tasks, so it was deployed. Parallel tool calls are also disabled (`parallel_tool_calls=False`), and `build_index` takes a placeholder `reason` argument because some tool parsers fail on zero-argument tools; I did not re-test 70B with those workarounds in place. Groq deprecated both models in August 2026, so the agent now runs `openai/gpt-oss-20b`.
 
 **Relevance filtering in RAG retrieval:**
 `query_collection` applies a minimum cosine-similarity threshold (`min_score`, default 0.25) before passing retrieved papers to the LLM. Without this, low-relevance matches (e.g., papers scoring 0.03–0.16 on an unrelated query) got included and diluted the generated answer with off-topic content. The agent is also instructed to say plainly when nothing relevant is found, rather than stretching unrelated papers into an answer.
