@@ -2,7 +2,7 @@
 
 A LangChain agent that autonomously collects, cleans, deduplicates, and stores arXiv papers, then answers questions about its own collection using retrieval-augmented generation (RAG). Built to explore agentic tool-calling workflows: an LLM decides which tools to invoke and in what order, rather than following a fixed script.
 
-**Live demo:** [Hugging Face Spaces](https://huggingface.co/spaces/pranjal25r/paperscout) <!-- update with your actual Space URL -->
+**Live demo:** [Hugging Face Spaces](https://huggingface.co/spaces/pranjal25r/paperscout)
 
 ## What it does
 
