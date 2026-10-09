@@ -89,6 +89,9 @@ def build_index(reason: str = "refresh index") -> dict:
 @tool
 def query_collection(question: str, top_k: int = 3, min_score: float = 0.25) -> dict:
     """
+    Use this for ANY question about a topic, or about which stored papers
+    relate to something.
+
     Retrieve the most relevant stored papers for a natural-language question,
     using semantic similarity search over the FAISS index built by build_index.
     Only returns matches above a minimum relevance score to avoid noise.

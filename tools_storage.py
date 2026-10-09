@@ -131,7 +131,9 @@ def store_papers(batch_id: str) -> dict:
 @tool
 def query_stored_papers(limit: int = 10) -> list[dict]:
     """
-    Retrieve stored papers from the local database, most recent first.
+    List stored papers (titles and IDs only). Use ONLY when the user asks to
+    list or show all stored papers. Never use it to decide which papers are
+    about a topic — use query_collection for that.
 
     Args:
         limit: Max number of records to return
