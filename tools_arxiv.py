@@ -17,7 +17,7 @@ def fetch_arxiv_papers(query: str, max_results: int = 10) -> list[dict]:
     Returns:
         List of dicts with keys: title, authors, abstract, published, pdf_url, arxiv_id
     """
-    client = arxiv.Client()
+    client = arxiv.Client(page_size=max_results, delay_seconds=3, num_retries=5)
     search = arxiv.Search(
         query=query,
         max_results=max_results,
