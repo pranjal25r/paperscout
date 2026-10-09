@@ -85,6 +85,9 @@ python app.py
 **Model choice (Llama-3.1-8B over Llama-3.3-70B, now gpt-oss-20b):**
 In my development runs (roughly 30–40, not a formal benchmark), Llama-3.3-70B on Groq repeatedly produced malformed tool calls: empty-argument parsing errors, malformed parallel tool calls, and type-mismatched arguments (e.g. `"10"` instead of `10`). Llama-3.1-8B was reliable on the same tasks, so it was deployed. Parallel tool calls are also disabled (`parallel_tool_calls=False`), and `build_index` takes a placeholder `reason` argument because some tool parsers fail on zero-argument tools; I did not re-test 70B with those workarounds in place. Groq deprecated both models in August 2026, so the agent now runs `openai/gpt-oss-20b`.
 
+**Design note: keeping data out of the LLM:**
+Originally `fetch_arxiv_papers` returned full abstracts to the model, which then had to re-emit them as JSON arguments to `clean_papers` and `store_papers`. On a 2-paper collect, one request reached 8,559 tokens and was rejected at Groq's 8,000 tokens-per-minute limit. Fetched papers now go into a SQLite `staging` table and the tools pass a `batch_id` between them: the model only sees IDs, counts and truncated titles, and abstracts stay in SQLite until `query_collection` retrieves them. In one live run after the change, the same 2-paper collect completed in 5 model requests totalling 6,370 tokens (largest single request 1,580), and the follow-up question took 2 requests totalling 3,151 tokens (largest 2,166).
+
 **Relevance filtering in RAG retrieval:**
 `query_collection` applies a minimum cosine-similarity threshold (`min_score`, default 0.25) before passing retrieved papers to the LLM. Without this, low-relevance matches (e.g., papers scoring 0.03–0.16 on an unrelated query) got included and diluted the generated answer with off-topic content. The agent is also instructed to say plainly when nothing relevant is found, rather than stretching unrelated papers into an answer.
 
@@ -103,6 +106,7 @@ Integrated [LangSmith](https://smith.langchain.com) tracing to inspect agent exe
 - No conversation memory between turns each request is handled independently
 - Corpus size is small (demo-scale); FAISS `IndexFlatIP` is exact search and wouldn't scale to large collections without an approximate-nearest-neighbor index
 - Relevance filtering (`min_score`) is a fixed threshold, not adaptively tuned per query
+- arXiv search requires all terms and returns the newest matches, so niche or long queries may return few papers
 
 ## Future improvements
 

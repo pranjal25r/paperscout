@@ -4,6 +4,8 @@ Tool 2: Clean, normalize, and dedupe collected paper records.
 import re
 from langchain.tools import tool
 
+from tools_storage import _get_conn
+
 
 def _normalize_title(title: str) -> str:
     """Lowercase, strip punctuation/whitespace for dedup comparison."""
@@ -14,70 +16,93 @@ def _normalize_title(title: str) -> str:
 
 
 @tool
-def clean_papers(papers: list[dict]) -> dict:
+def clean_papers(batch_id: str) -> dict:
     """
-    Clean and deduplicate a list of paper records.
+    Clean and deduplicate a staged batch of paper records in place.
 
     Args:
-        papers: List of dicts from fetch_arxiv_papers, each with keys
-                arxiv_id, title, authors, abstract, published, pdf_url
+        batch_id: Batch identifier returned by fetch_arxiv_papers
 
     Returns:
-        Dict with keys:
-            - cleaned: list of deduped, normalized paper dicts
-            - stats: dict with counts of input, duplicates_removed, output
+        Dict with keys: batch_id, input_count, duplicates_removed, output_count
     """
+    conn = _get_conn()
+    cur = conn.cursor()
+    rows = cur.execute(
+        "SELECT rowid, arxiv_id, title, abstract FROM staging WHERE batch_id = ? ORDER BY rowid",
+        (batch_id,),
+    ).fetchall()
+
     seen_ids = set()
     seen_titles = set()
-    cleaned = []
+    kept = 0
     duplicates = 0
 
-    for p in papers:
-        arxiv_id = p.get("arxiv_id", "").strip()
-        title = p.get("title", "").strip()
+    for rowid, arxiv_id, title, abstract in rows:
+        arxiv_id = (arxiv_id or "").strip()
+        title = (title or "").strip()
         norm_title = _normalize_title(title)
 
         # Skip malformed records
         if not arxiv_id or not title:
+            cur.execute("DELETE FROM staging WHERE rowid = ?", (rowid,))
             continue
 
         # Dedup by arxiv_id OR normalized title
         if arxiv_id in seen_ids or norm_title in seen_titles:
             duplicates += 1
+            cur.execute("DELETE FROM staging WHERE rowid = ?", (rowid,))
             continue
 
         seen_ids.add(arxiv_id)
         seen_titles.add(norm_title)
 
-        abstract = p.get("abstract", "").strip()
-        cleaned.append({
-            "arxiv_id": arxiv_id,
-            "title": title,
-            "authors": p.get("authors", []),
-            "abstract": abstract,
-            "abstract_word_count": len(abstract.split()),
-            "published": p.get("published", ""),
-            "pdf_url": p.get("pdf_url", ""),
-        })
+        abstract = (abstract or "").strip()
+        cur.execute(
+            "UPDATE staging SET arxiv_id = ?, title = ?, abstract = ?, abstract_word_count = ? "
+            "WHERE rowid = ?",
+            (arxiv_id, title, abstract, len(abstract.split()), rowid),
+        )
+        kept += 1
 
-    stats = {
-        "input_count": len(papers),
+    conn.commit()
+    conn.close()
+
+    result = {
+        "batch_id": batch_id,
+        "input_count": len(rows),
         "duplicates_removed": duplicates,
-        "output_count": len(cleaned),
+        "output_count": kept,
     }
-
-    return {"cleaned": cleaned, "stats": stats}
+    if not rows:
+        result["note"] = "No staged papers found for this batch_id."
+    return result
 
 
 if __name__ == "__main__":
-    # Quick standalone test with fake duplicate data
+    import os
+    import tempfile
+    from pathlib import Path
+
+    from tools_storage import _stage_papers
+
+    # Quick standalone test with fake duplicate data, against a throwaway DB
+    tmp_dir = tempfile.TemporaryDirectory()
+    os.environ["PAPERSCOUT_DB"] = str(Path(tmp_dir.name) / "test.db")
+
     sample = [
         {"arxiv_id": "1234.5678", "title": "Diffusion Models Are Great", "authors": ["A"], "abstract": "abc", "published": "2026-01-01", "pdf_url": "x"},
         {"arxiv_id": "1234.5678", "title": "Diffusion Models Are Great", "authors": ["A"], "abstract": "abc", "published": "2026-01-01", "pdf_url": "x"},
         {"arxiv_id": "9999.0001", "title": "  Diffusion   models are great  ", "authors": ["B"], "abstract": "def", "published": "2026-01-02", "pdf_url": "y"},
         {"arxiv_id": "8888.0002", "title": "Something Totally Different", "authors": ["C"], "abstract": "ghi", "published": "2026-01-03", "pdf_url": "z"},
     ]
-    result = clean_papers.invoke({"papers": sample})
-    print(result["stats"])
-    for p in result["cleaned"]:
-        print("-", p["title"])
+    batch_id = _stage_papers(sample)
+    result = clean_papers.invoke({"batch_id": batch_id})
+    print(result)
+
+    conn = _get_conn()
+    for (title,) in conn.execute("SELECT title FROM staging WHERE batch_id = ? ORDER BY rowid", (batch_id,)):
+        print("-", title)
+    conn.close()
+
+    tmp_dir.cleanup()
