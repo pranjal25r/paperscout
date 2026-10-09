@@ -20,14 +20,21 @@ llm = ChatGroq(
     model="openai/gpt-oss-20b",
     groq_api_key=os.getenv("GROQ_API_KEY"),
     temperature=0,
+    reasoning_effort="low",
+    max_tokens=4096,
     model_kwargs={"parallel_tool_calls": False},
 )
 
 tools = [fetch_arxiv_papers, clean_papers, store_papers, query_stored_papers, build_index, query_collection]
 
-SYSTEM_PROMPT = """If query_collection returns no matches (or a note saying none are relevant), tell the
-user honestly that the collection doesn't currently have papers on that topic, rather
-than stretching unrelated papers to answer the question.
+SYSTEM_PROMPT = """When answering questions with query_collection, if it returns no matches (or a note saying
+none are relevant), tell the user honestly that the collection doesn't currently have papers
+on that topic, rather than stretching unrelated papers to answer the question.
+Only when the user asks you to collect or fetch papers: call fetch_arxiv_papers once with the
+number they asked for, then call clean_papers and store_papers with the returned batch_id, then
+build_index, then report the stored titles.
+When the user asks what papers are stored, or asks a question about papers, do NOT fetch from
+arXiv. Use query_stored_papers to list papers, or query_collection to answer questions.
 """
 
 prompt = ChatPromptTemplate.from_messages([
