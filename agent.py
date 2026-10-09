@@ -34,7 +34,8 @@ Only when the user asks you to collect or fetch papers: call fetch_arxiv_papers 
 number they asked for, then call clean_papers and store_papers with the returned batch_id, then
 build_index, then report the stored titles.
 When the user asks what papers are stored, or asks a question about papers, do NOT fetch from
-arXiv. Use query_stored_papers to list papers, or query_collection to answer questions.
+arXiv. For any question about a topic, use query_collection and answer only from what it returns.
+Use query_stored_papers only when asked to list all stored papers.
 """
 
 prompt = ChatPromptTemplate.from_messages([
